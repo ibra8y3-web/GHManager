@@ -157,3 +157,114 @@ fun ResolveDialog(dir: File, path: String, onClose: () -> Unit, onDone: () -> Un
         }
     }
 }
+
+/** One-tap flow for a pull request that has conflicts: clone, merge the base branch into the PR branch, resolve, push. */
+@Composable
+fun PrConflictDialog(
+    owner: String, name: String, baseRef: String, headRef: String, sameRepo: Boolean,
+    onClose: () -> Unit, onDone: () -> Unit
+) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val dir = remember(owner, name) { LocalGit.dir(ctx, owner, name) }
+    var log by remember { mutableStateOf(listOf<String>()) }
+    var busy by remember { mutableStateOf(false) }
+    var conflicts by remember { mutableStateOf(listOf<String>()) }
+    var merging by remember { mutableStateOf(false) }
+    var resolve by remember { mutableStateOf<String?>(null) }
+    var finished by remember { mutableStateOf(false) }
+    var err by remember { mutableStateOf<String?>(null) }
+
+    fun add(s: String) { log = log + s }
+
+    suspend fun refreshState() {
+        val i = LocalGit.info(dir)
+        conflicts = i.conflicts
+        merging = i.state == "MERGING"
+    }
+
+    suspend fun finish() {
+        refreshState()
+        if (conflicts.isNotEmpty()) throw IllegalStateException("Resolve all conflicted files first.")
+        if (merging) {
+            val (n, e) = identity()
+            add("Committing the merge...")
+            LocalGit.commitAll(dir, "Merge branch '$baseRef' into $headRef", n, e)
+        }
+        add("Pushing $headRef...")
+        LocalGit.push(dir)
+        add("Done. The pull request should be mergeable now.")
+        finished = true
+        onDone()
+    }
+
+    fun launchStep(block: suspend () -> Unit) {
+        scope.launch {
+            busy = true; err = null
+            try { block() }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { err = e.message; Store.log("Resolve PR conflicts", false, e.message.orEmpty()) }
+            busy = false
+        }
+    }
+
+    FullDialog("Resolve conflicts", onClose) { pad ->
+        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (!sameRepo) {
+                Panel {
+                    Text("This pull request comes from a fork, so its branch is not in this repository. Open the fork, clone it in the Local tab, merge $baseRef, resolve and push.", style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                Panel {
+                    Text("$headRef  <-  $baseRef", style = MaterialTheme.typography.titleSmall, fontFamily = FontFamily.Monospace)
+                    Text("The app clones the repository, merges $baseRef into $headRef on your phone, lets you fix each conflicted file, then pushes.", style = MaterialTheme.typography.bodySmall)
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (!finished && conflicts.isEmpty() && !merging) {
+                        Button(onClick = {
+                            launchStep {
+                                if (!LocalGit.cloned(dir)) { add("Cloning (first time only)..."); LocalGit.clone(dir, owner, name, headRef) }
+                                add("Fetching..."); LocalGit.fetch(dir)
+                                val i0 = LocalGit.info(dir)
+                                if (i0.state == "MERGING") {
+                                    add("Continuing the unfinished merge.")
+                                } else {
+                                    if (i0.changes.isNotEmpty()) throw IllegalStateException("The local copy has uncommitted changes. Commit or delete it in the Local tab first.")
+                                    add("Switching to $headRef"); LocalGit.checkout(dir, headRef)
+                                    add(LocalGit.pull(dir))
+                                    add("Merging $baseRef..."); add(LocalGit.merge(dir, baseRef))
+                                }
+                                refreshState()
+                                if (conflicts.isEmpty()) finish() else add("${conflicts.size} file(s) have conflicts.")
+                            }
+                        }, enabled = !busy) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Start") }
+                    }
+                }
+                if (conflicts.isNotEmpty()) Panel {
+                    SectionTitle("Conflicts")
+                    conflicts.forEach { c ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, null, tint = Warn)
+                            Spacer(Modifier.width(8.dp))
+                            Text(c, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                            Button(onClick = { resolve = c }) { Text("Resolve") }
+                        }
+                    }
+                }
+                if (merging && conflicts.isEmpty() && !finished) {
+                    Button(onClick = { launchStep { finish() } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.CloudUpload, null); Spacer(Modifier.width(6.dp)); Text("Commit merge and push")
+                    }
+                }
+                if (log.isNotEmpty()) Panel { log.forEach { Text(it, style = MaterialTheme.typography.bodySmall) } }
+                err?.let { ErrorBox(it) }
+                if (finished) Button(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text("Close") }
+            }
+        }
+    }
+    resolve?.let { p ->
+        ResolveDialog(dir, p, { resolve = null }) {
+            resolve = null
+            scope.launch { try { refreshState() } catch (e: Exception) { err = e.message } }
+        }
+    }
+}

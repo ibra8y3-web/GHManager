@@ -317,5 +317,8 @@ val AR: Map<String, String> = mapOf(
     "rebase" to "إعادة تأسيس",
     "select" to "اختر",
     "Danger zone" to "منطقة الخطر",
-    "Back " to "رجوع"
+    "Resolve conflicts here" to "حل التعارضات من هنا",
+    "Resolve conflicts" to "حل التعارضات",
+    "Start" to "ابدأ",
+    "Commit merge and push" to "حفظ الدمج ورفعه"
 )

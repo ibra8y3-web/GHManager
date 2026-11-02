@@ -29,5 +29,5 @@ UI languages: English and Arabic (RTL), switchable in Account > Settings.
 - Dynamic sentences that include numbers or names are shown in English even in Arabic mode.
 - Background alerts are polled by WorkManager (about every 15 minutes), not instant push.
 - Large non-LFS files over 90 MB are skipped; LFS needs LFS quota on the account.
-- Merge conflicts are resolved in the Local tab (clone, merge, edit, push), not directly from the PR screen.
+- Pull request conflicts: the PR screen has a "Resolve conflicts here" button (clone, merge, resolve, push). It works for branches in the same repository, not for fork PRs.
 - Never compiled in the authoring environment: the first Actions build may need small fixes.

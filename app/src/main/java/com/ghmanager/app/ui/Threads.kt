@@ -109,6 +109,7 @@ fun ThreadDialog(base: String, t0: JSONObject, pr: Boolean, onClose: () -> Unit,
     var reload by remember { mutableIntStateOf(0) }
     var text by remember { mutableStateOf("") }
     var method by remember { mutableStateOf("merge") }
+    var conflictDlg by remember { mutableStateOf(false) }
     LaunchedEffect(reload) {
         try {
             cur = Github.get(if (pr) "$base/pulls/$n" else "$base/issues/$n")
@@ -210,5 +211,14 @@ fun ThreadDialog(base: String, t0: JSONObject, pr: Boolean, onClose: () -> Unit,
                 }
             }
         }
+    }
+    if (conflictDlg) {
+        val parts = base.removePrefix("/repos/").split("/")
+        val headRepo = cur.optJSONObject("head")?.optJSONObject("repo")?.s("full_name").orEmpty()
+        val baseRepo = cur.optJSONObject("base")?.optJSONObject("repo")?.s("full_name").orEmpty()
+        PrConflictDialog(
+            parts[0], parts[1], cur.optJSONObject("base")?.s("ref").orEmpty(), cur.optJSONObject("head")?.s("ref").orEmpty(),
+            headRepo.isNotEmpty() && headRepo == baseRepo, { conflictDlg = false }
+        ) { refresh() }
     }
 }
