@@ -1,5 +1,7 @@
 package com.ghmanager.app.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -50,10 +52,14 @@ fun LoginScreen(onDone: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Spacer(Modifier.height(24.dp))
-        Box(Modifier.size(84.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), Alignment.Center) {
-            Icon(Icons.Default.AccountTree, null, Modifier.size(44.dp), tint = MaterialTheme.colorScheme.primary)
+        Box(
+            Modifier.size(92.dp).clip(RoundedCornerShape(28.dp))
+                .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))),
+            Alignment.Center
+        ) {
+            Icon(Icons.Default.AccountTree, null, Modifier.size(48.dp), tint = androidx.compose.ui.graphics.Color.White)
         }
-        Text(t("GitHub Manager"), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text(t("GitHub Manager"), fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
         Text(
             "Repositories, uploads, builds and releases in one place.",
             color = MaterialTheme.colorScheme.outline, textAlign = TextAlign.Center

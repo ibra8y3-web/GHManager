@@ -1,0 +1,44 @@
+name: Windows Build and Screenshot
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        if: hashFiles('**/*.csproj', '**/*.sln') != ''
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build
+        shell: pwsh
+        run: |
+          if (Get-ChildItem -Recurse -Include *.sln,*.csproj) { dotnet publish -c Release -o out }
+          elseif (Test-Path package.json) { npm ci; npm run build --if-present }
+      - name: Run app and take a screenshot
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force preview | Out-Null
+          $exe = Get-ChildItem -Recurse out,dist -Include *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($exe) { Start-Process $exe.FullName; Start-Sleep -Seconds 8 }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("preview/screenshot.png")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-screenshot
+          path: preview
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            out
+            dist
+          if-no-files-found: ignore

@@ -1,0 +1,46 @@
+name: Android Build and Screenshot
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build debug APK
+        run: |
+          if [ -f gradlew ]; then chmod +x gradlew && ./gradlew assembleDebug --stacktrace; else gradle assembleDebug --stacktrace; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: '**/build/outputs/apk/debug/*.apk'
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Run on emulator and take a screenshot
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          script: |
+            mkdir -p preview
+            adb install -r $(find . -path '*outputs/apk/debug/*.apk' | head -n1)
+            PKG=$(aapt dump badging $(find . -path '*outputs/apk/debug/*.apk' | head -n1) 2>/dev/null | sed -n "s/package: name='\([^']*\)'.*/\1/p")
+            adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 || true
+            sleep 10
+            adb exec-out screencap -p > preview/screenshot.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-screenshot
+          path: preview
+          if-no-files-found: ignore

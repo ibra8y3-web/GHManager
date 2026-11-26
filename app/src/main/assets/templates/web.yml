@@ -1,0 +1,28 @@
+name: Web Build
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        if: hashFiles('package.json') != ''
+        with:
+          node-version: 20
+      - name: Build site
+        run: |
+          mkdir -p site
+          if [ -f package.json ]; then
+            (npm ci || npm install)
+            npm run build --if-present
+            for d in dist build out public; do [ -f "$d/index.html" ] && cp -r "$d"/. site/ && break; done
+          fi
+          [ -f site/index.html ] || cp -r . site/ 2>/dev/null || true
+          rm -rf site/.git site/node_modules site/site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-site
+          path: site

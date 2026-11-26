@@ -1,5 +1,7 @@
 package com.ghmanager.app.ui
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.background
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -71,9 +73,9 @@ fun CoroutineScope.op(ctx: Context, label: String, after: () -> Unit = {}, block
 @Composable
 fun Panel(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    val border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    val border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
     val inner: @Composable ColumnScope.() -> Unit = {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
     if (onClick != null) Card(onClick = onClick, modifier = modifier.fillMaxWidth(), colors = colors, border = border, content = inner)
     else Card(modifier = modifier.fillMaxWidth(), colors = colors, border = border, content = inner)
@@ -93,7 +95,7 @@ fun Field(
 ) {
     OutlinedTextField(
         value = value, onValueChange = onChange, label = { Text(t(label)) }, singleLine = singleLine,
-        modifier = modifier, enabled = enabled, shape = RoundedCornerShape(12.dp),
+        modifier = modifier, enabled = enabled, shape = RoundedCornerShape(16.dp),
         textStyle = if (mono) TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp) else LocalTextStyle.current,
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None
     )
@@ -145,9 +147,10 @@ fun FullDialog(
         Surface(Modifier.fillMaxSize()) {
             Scaffold(topBar = {
                 TopAppBar(
-                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold) },
                     navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close") } },
-                    actions = actions
+                    actions = actions,
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
                 )
             }, content = content)
         }
@@ -174,8 +177,12 @@ fun EmptyState(icon: ImageVector, text: String) {
 }
 
 @Composable
-fun SectionTitle(title: String) =
-    Text(t(title), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+fun SectionTitle(title: String) {
+    Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.width(4.dp).height(16.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
 
 @Composable
 fun PagedList(

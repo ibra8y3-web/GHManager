@@ -249,13 +249,16 @@ object Detect {
         return when {
             "pubspec.yaml" in root -> "Flutter"
             root.any { it == "build.gradle" || it == "build.gradle.kts" || it == "settings.gradle" || it == "settings.gradle.kts" } -> "Android"
+            "index.html" in root -> "Web"
             "package.json" in root -> "Node"
+            root.any { it.endsWith(".sln") || it.endsWith(".csproj") } -> "Windows + screenshot"
+            "cmakelists.txt" in root.map { it.lowercase() } || "Makefile" in root -> "Linux + screenshot"
             else -> null
         }
     }
 
     fun template(c: Context, type: String): String =
-        c.assets.open("templates/${type.lowercase()}.yml").bufferedReader().use { it.readText() }
+        c.assets.open("templates/${type.lowercase().replace(" + ", "-").replace(" ", "-")}.yml").bufferedReader().use { it.readText() }
 }
 
 object Files {

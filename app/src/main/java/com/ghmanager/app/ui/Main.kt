@@ -18,6 +18,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -79,15 +82,29 @@ fun MainScreen(openRepo: (String, String) -> Unit, addAccount: () -> Unit, signO
     )
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(t(if (tab == 0) "Repositories" else tabs[tab].first), fontWeight = FontWeight.Bold) },
-                actions = { IconButton(onClick = { Github.repoVersion++ }) { Icon(Icons.Default.Refresh, "Refresh") } }
-            )
+            Row(
+                Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (tab == 0) "Repositories" else tabs[tab].first, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+                    Box(Modifier.padding(top = 4.dp).width(36.dp).height(4.dp).clip(RoundedCornerShape(50))
+                        .background(Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))))
+                }
+                FilledTonalIconButton(onClick = { Github.repoVersion++ }) { Icon(Icons.Default.Refresh, "Refresh") }
+            }
         },
         bottomBar = {
-            NavigationBar {
-                tabs.forEachIndexed { i, (tt, ic) ->
-                    NavigationBarItem(selected = tab == i, onClick = { tab = i }, icon = { Icon(ic, tt) }, label = { Text(tt) })
+            Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 14.dp, end = 14.dp, bottom = 10.dp, top = 4.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(30.dp), color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth().shadow(10.dp, RoundedCornerShape(30.dp))
+                ) {
+                    NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp, windowInsets = WindowInsets(0, 0, 0, 0)) {
+                        tabs.forEachIndexed { i, (tt, ic) ->
+                            NavigationBarItem(selected = tab == i, onClick = { tab = i }, icon = { Icon(ic, tt) }, label = { Text(tt) })
+                        }
+                    }
                 }
             }
         }
@@ -124,7 +141,11 @@ fun ReposScreen(open: (String, String) -> Unit) {
             OutlinedTextField(
                 q, { q = it }, singleLine = true, placeholder = { Text(t("Search your repositories")) },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
-                modifier = Modifier.fillMaxWidth().padding(12.dp, 4.dp), shape = RoundedCornerShape(28.dp)
+                modifier = Modifier.fillMaxWidth().padding(16.dp, 8.dp), shape = RoundedCornerShape(28.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedBorderColor = Color.Transparent, focusedBorderColor = MaterialTheme.colorScheme.primary
+                )
             )
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("All", "Public", "Private", "Forks", "Archived", "Templates").forEach {
@@ -145,15 +166,31 @@ fun ReposScreen(open: (String, String) -> Unit) {
     if (create) CreateRepoDialog { create = false }
 }
 
+private fun langColor(l: String): Color = when (l) {
+    "Kotlin" -> Color(0xFFA97BFF); "Python" -> Color(0xFF3776AB); "TypeScript" -> Color(0xFF3178C6)
+    "JavaScript" -> Color(0xFFF1C40F); "Java" -> Color(0xFFE76F00); "Rust" -> Color(0xFFDEA584)
+    "Go" -> Color(0xFF00ADD8); "C++" -> Color(0xFFF34B7D); "C#" -> Color(0xFF178600)
+    "Dart" -> Color(0xFF00B4AB); "HTML" -> Color(0xFFE34C26); "Shell" -> Color(0xFF89E051)
+    else -> Color(0xFF8C90AA)
+}
+
 @Composable
 fun RepoCard(r: JSONObject, onClick: () -> Unit) {
     Panel(onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(
-                if (r.optBoolean("private")) Icons.Default.Lock else Icons.Default.Public, null,
-                Modifier.size(18.dp), tint = MaterialTheme.colorScheme.outline
-            )
-            Text(r.s("full_name"), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (r.optBoolean("private")) Icons.Default.Lock else Icons.Default.Folder, null,
+                    Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text(r.s("name"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(r.s("full_name").substringBefore('/'), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            }
             if (r.optBoolean("fork")) Pill("fork", MaterialTheme.colorScheme.tertiary)
             if (r.optBoolean("archived")) Pill("archived", Warn)
             if (r.optBoolean("is_template")) Pill("template", MaterialTheme.colorScheme.secondary)
@@ -162,9 +199,18 @@ fun RepoCard(r: JSONObject, onClick: () -> Unit) {
         if (d.isNotEmpty()) Text(d, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, maxLines = 2)
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             val lang = r.s("language")
-            if (lang.isNotEmpty()) Text(lang, style = MaterialTheme.typography.labelMedium)
-            Text("${r.optInt("stargazers_count")} stars", style = MaterialTheme.typography.labelMedium)
-            Text("${r.optInt("open_issues_count")} open", style = MaterialTheme.typography.labelMedium)
+            if (lang.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(langColor(lang)))
+                Text(lang, style = MaterialTheme.typography.labelMedium)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Icon(Icons.Default.Star, null, Modifier.size(14.dp), tint = Warn)
+                Text("${r.optInt("stargazers_count")}", style = MaterialTheme.typography.labelMedium)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Icon(Icons.Outlined.ErrorOutline, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+                Text("${r.optInt("open_issues_count")}", style = MaterialTheme.typography.labelMedium)
+            }
             Spacer(Modifier.weight(1f))
             Text(ago(r.s("pushed_at")), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         }
@@ -298,17 +344,31 @@ fun AccountScreen(signOut: () -> Unit, addAccount: () -> Unit, openRepo: (String
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         err?.let { ErrorBox(it) { tick++ } }
         user?.let { u ->
-            Panel {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    AsyncImage(u.s("avatar_url"), null, Modifier.size(64.dp).clip(CircleShape))
-                    Column {
-                        Text(u.s("name").ifEmpty { u.s("login") }, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text("@${u.s("login")}", color = MaterialTheme.colorScheme.outline)
-                        val plan = u.optJSONObject("plan")?.s("name").orEmpty()
-                        if (plan.isNotEmpty()) Pill("plan: $plan", MaterialTheme.colorScheme.primary)
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp))
+                    .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))).padding(20.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        AsyncImage(u.s("avatar_url"), null, Modifier.size(70.dp).clip(CircleShape))
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(u.s("name").ifEmpty { u.s("login") }, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                            Text("@${u.s("login")}", color = Color.White.copy(alpha = 0.85f))
+                            val plan = u.optJSONObject("plan")?.s("name").orEmpty()
+                            if (plan.isNotEmpty()) Text("plan: $plan", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                        listOf(
+                            u.optInt("public_repos") to "public", u.optInt("owned_private_repos") to "private", u.optInt("followers") to "followers"
+                        ).forEach { (n, l) ->
+                            Column {
+                                Text("$n", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(l, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.85f))
+                            }
+                        }
                     }
                 }
-                Text("${u.optInt("public_repos")} public  ${u.optInt("owned_private_repos")} private  ${u.optInt("followers")} followers", style = MaterialTheme.typography.bodySmall)
             }
         }
         Panel {

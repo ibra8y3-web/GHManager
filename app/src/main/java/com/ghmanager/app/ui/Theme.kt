@@ -11,20 +11,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 private val Light = lightColorScheme(
-    primary = Color(0xFF0F8F6E), onPrimary = Color.White,
-    primaryContainer = Color(0xFFD3F5EA), onPrimaryContainer = Color(0xFF053D2E),
-    secondary = Color(0xFF2E6FD8), tertiary = Color(0xFF7A4FD6),
-    background = Color(0xFFF4F7F6), surface = Color.White,
-    surfaceVariant = Color(0xFFE6ECEA), outline = Color(0xFF7C8B86),
-    outlineVariant = Color(0xFFD3DCD9), error = Color(0xFFC9372C)
+    primary = Color(0xFF5B5BD6), onPrimary = Color.White,
+    primaryContainer = Color(0xFFE4E4FF), onPrimaryContainer = Color(0xFF16165C),
+    secondary = Color(0xFF0EA5A4), tertiary = Color(0xFFE5484D),
+    background = Color(0xFFF5F6FB), surface = Color.White,
+    surfaceVariant = Color(0xFFEDEEF7), outline = Color(0xFF787A92),
+    outlineVariant = Color(0xFFE1E3F0), error = Color(0xFFD92D3A)
 )
 private val Dark = darkColorScheme(
-    primary = Color(0xFF2FD3A5), onPrimary = Color(0xFF00382A),
-    primaryContainer = Color(0xFF12392F), onPrimaryContainer = Color(0xFFB4F2DF),
-    secondary = Color(0xFF5AA9FF), tertiary = Color(0xFFB79CFF),
-    background = Color(0xFF0E1116), surface = Color(0xFF151A21),
-    surfaceVariant = Color(0xFF1F262E), outline = Color(0xFF7D8A96),
-    outlineVariant = Color(0xFF2A333D), error = Color(0xFFFF6B6B)
+    primary = Color(0xFF9A9AFF), onPrimary = Color(0xFF14143F),
+    primaryContainer = Color(0xFF26275E), onPrimaryContainer = Color(0xFFE0E0FF),
+    secondary = Color(0xFF2DD4BF), tertiary = Color(0xFFFF7A80),
+    background = Color(0xFF0B0D16), surface = Color(0xFF151827),
+    surfaceVariant = Color(0xFF1E2234), outline = Color(0xFF8C90AA),
+    outlineVariant = Color(0xFF2A2F46), error = Color(0xFFFF6B7A)
 )
 
 val Good = Color(0xFF2FB36D)
@@ -35,9 +35,9 @@ fun AppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = if (isSystemInDarkTheme()) Dark else Light,
         shapes = Shapes(
-            small = RoundedCornerShape(8.dp),
-            medium = RoundedCornerShape(14.dp),
-            large = RoundedCornerShape(22.dp)
+            small = RoundedCornerShape(12.dp),
+            medium = RoundedCornerShape(20.dp),
+            large = RoundedCornerShape(28.dp)
         ),
         content = {
             CompositionLocalProvider(LocalLayoutDirection provides if (Lang.isAr) LayoutDirection.Rtl else LayoutDirection.Ltr) {

@@ -1,5 +1,7 @@
 package com.ghmanager.app.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -50,16 +52,42 @@ fun ActionsTab(base: String, repo: JSONObject?) {
     var sel by remember { mutableStateOf<JSONObject?>(null) }
     var dispatch by remember { mutableStateOf(false) }
     var addWf by remember { mutableStateOf(false) }
+    var latest by remember { mutableStateOf<JSONObject?>(null) }
+    var live by remember { mutableStateOf<JSONObject?>(null) }
+    LaunchedEffect(base) {
+        var lastId = 0L
+        while (true) {
+            try {
+                val r = Github.get("$base/actions/runs?per_page=1").optJSONArray("workflow_runs")?.list()?.firstOrNull()
+                latest = r
+                if (r != null && r.optLong("id") != lastId) { if (lastId != 0L) reload++; lastId = r.optLong("id") }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {}
+            delay(8000)
+        }
+    }
     Column(Modifier.fillMaxSize()) {
+        latest?.let { l ->
+            if (l.s("status") != "completed") {
+                Panel(Modifier.padding(12.dp, 6.dp), onClick = { live = l }) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Text(t("Build running: watch it live"), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.LiveTv, null)
+                    }
+                }
+            }
+        }
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(12.dp, 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { dispatch = true }) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text(t("Run workflow")) }
             OutlinedButton(onClick = { addWf = true }) { Icon(Icons.Default.PostAdd, null); Spacer(Modifier.width(6.dp)); Text(t("Add workflow")) }
             OutlinedButton(onClick = { reload++ }) { Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(6.dp)); Text(t("Refresh")) }
+            OutlinedButton(enabled = latest != null, onClick = { live = latest }) { Icon(Icons.Default.LiveTv, null); Spacer(Modifier.width(6.dp)); Text(t("Live view")) }
         }
         PagedList("$base/actions/runs", reload, unwrap = "workflow_runs", empty = "No workflow runs yet") { r ->
             val st = r.s("status"); val cc = r.s("conclusion")
             Panel(onClick = { sel = r }) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.width(4.dp).height(44.dp).background(statusColor(st, cc), RoundedCornerShape(50)))
                     Icon(statusIcon(st, cc), null, tint = statusColor(st, cc))
                     Column(Modifier.weight(1f)) {
                         Text(r.s("display_title"), fontWeight = FontWeight.SemiBold, maxLines = 2)
@@ -74,6 +102,7 @@ fun ActionsTab(base: String, repo: JSONObject?) {
         }
     }
     sel?.let { RunDialog(base, it, { sel = null }) { reload++ } }
+    live?.let { LiveBuildDialog(base, it) { live = null } }
     if (dispatch) DispatchDialog(base, repo?.s("default_branch").orEmpty(), { dispatch = false }) { reload++ }
     if (addWf) AddWorkflowDialog(base, repo?.s("default_branch").orEmpty()) { addWf = false }
 }
@@ -129,7 +158,7 @@ fun AddWorkflowDialog(base: String, def: String, onClose: () -> Unit) {
         }
     }) {
         Text(if (detected != null) "Detected project type: $detected" else "Project type not detected. Pick a template.", style = MaterialTheme.typography.bodySmall)
-        Pick("Template", type, listOf("Android", "Flutter", "Node")) { type = it }
+        Pick("Template", type, listOf("Android", "Android + screenshot", "Flutter", "Node", "Web", "Linux + screenshot", "Windows + screenshot")) { type = it }
         Field("File name", file, { file = it })
         Text(t("Pushing workflow files needs the workflow scope on your token."), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
     }
@@ -147,6 +176,7 @@ fun RunDialog(base: String, run0: JSONObject, onClose: () -> Unit, onChanged: ()
     var logJob by remember { mutableStateOf<JSONObject?>(null) }
     var saved by remember { mutableStateOf<List<File>?>(null) }
     var prog by remember { mutableStateOf<String?>(null) }
+    var liveOpen by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { if (run0.s("status") != "completed") Store.watch(base, id) }
     LaunchedEffect(tick) {
         while (true) {
@@ -165,6 +195,7 @@ fun RunDialog(base: String, run0: JSONObject, onClose: () -> Unit, onChanged: ()
         scope.op(ctx, label, { tick++; onChanged() }) { Github.send(method, "$base/actions/runs/$id$path") }
 
     FullDialog("Run #${run.optInt("run_number")}", onClose, actions = {
+        IconButton(onClick = { liveOpen = true }) { Icon(Icons.Default.LiveTv, "Live view") }
         IconButton(onClick = { openUrl(ctx, run.s("html_url")) }) { Icon(Icons.Default.OpenInBrowser, "Open on GitHub") }
     }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -239,6 +270,7 @@ fun RunDialog(base: String, run0: JSONObject, onClose: () -> Unit, onChanged: ()
     }
     logJob?.let { LogDialog(base, it) { logJob = null } }
     saved?.let { SavedDialog(it) { saved = null } }
+    if (liveOpen) LiveBuildDialog(base, run) { liveOpen = false }
 }
 
 @Composable

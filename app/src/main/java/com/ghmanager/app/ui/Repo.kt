@@ -1,5 +1,8 @@
 package com.ghmanager.app.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,21 +56,49 @@ fun RepoScreen(owner: String, name: String, back: () -> Unit) {
     }
     Scaffold(topBar = {
         Column {
-            TopAppBar(
-                title = { Column { Text(name, fontWeight = FontWeight.Bold, maxLines = 1); Text(owner, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline) } },
-                navigationIcon = { IconButton(onClick = back) { Icon(Icons.Default.ArrowBack, "Back") } },
-                actions = {
-                    val st = starred
-                    if (st != null) IconButton(onClick = {
-                        scope.op(ctx, if (st) "Unstar $owner/$name" else "Star $owner/$name", { starred = !st }) {
-                            Github.send(if (st) "DELETE" else "PUT", "/user/starred/$owner/$name")
+            Box(
+                Modifier.fillMaxWidth()
+                    .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)))
+                    .statusBarsPadding().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 16.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = back) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
+                        Column(Modifier.weight(1f)) {
+                            Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = Color.White, maxLines = 1)
+                            Text(owner, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.85f))
                         }
-                    }) { Icon(if (st) Icons.Default.Star else Icons.Default.StarBorder, "Star", tint = if (st) Warn else MaterialTheme.colorScheme.onSurface) }
-                    IconButton(onClick = { openUrl(ctx, "https://github.com/$owner/$name") }) { Icon(Icons.Default.OpenInBrowser, "Open on GitHub") }
+                        val st = starred
+                        if (st != null) IconButton(onClick = {
+                            scope.op(ctx, if (st) "Unstar $owner/$name" else "Star $owner/$name", { starred = !st }) {
+                                Github.send(if (st) "DELETE" else "PUT", "/user/starred/$owner/$name")
+                            }
+                        }) { Icon(if (st) Icons.Default.Star else Icons.Default.StarBorder, "Star", tint = if (st) Warn else Color.White) }
+                        IconButton(onClick = { openUrl(ctx, "https://github.com/$owner/$name") }) { Icon(Icons.Default.OpenInBrowser, "Open on GitHub", tint = Color.White) }
+                    }
+                    repo?.let { r ->
+                        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val d = r.s("description")
+                            if (d.isNotEmpty()) Text(d, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f), maxLines = 2)
+                            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.Star, null, Modifier.size(16.dp), tint = Color.White); Text("${r.optInt("stargazers_count")}", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Outlined.AccountTree, null, Modifier.size(16.dp), tint = Color.White); Text("${r.optInt("forks_count")}", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Outlined.ErrorOutline, null, Modifier.size(16.dp), tint = Color.White); Text("${r.optInt("open_issues_count")}", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
+                    }
                 }
-            )
-            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-                tabs.forEachIndexed { i, (tt, ic) -> Tab(tab == i, { tab = i }, text = { Text(t(tt)) }, icon = { Icon(ic, null) }) }
+            }
+            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                tabs.forEachIndexed { i, (tt, ic) ->
+                    FilterChip(tab == i, { tab = i }, { Text(tt) }, shape = RoundedCornerShape(50), leadingIcon = { Icon(ic, null, Modifier.size(18.dp)) })
+                }
             }
         }
     }) { pad ->

@@ -25,6 +25,13 @@ UI languages: English and Arabic (RTL), switchable in Account > Settings.
 - Background notifications (GitHub inbox and finished builds you opened) every ~15 minutes.
 - Encrypted local backup of settings and accounts (tokens only if you set a password and opt in).
 
+## Live Build (new)
+- Actions tab: a banner appears when a build is running; also a **Live view** button and an icon inside every run.
+- Real status every 3 s (no fake bar): elapsed time, steps done / total, jobs and steps with state.
+- Project type is detected from real repo files and artifact names: Web, Android, Flutter, Windows, Linux, macOS.
+- Web: the repo files at that commit render in a WebView and refresh on every new commit; if sources need a build, the preview comes from the built artifact.
+- Android / Flutter: APK artifact with Download and install. Windows / Linux / macOS: download; a screenshot shows if the workflow uploads an artifact named `preview` or `screenshot`.
+
 ## Known limits
 - Dynamic sentences that include numbers or names are shown in English even in Arabic mode.
 - Background alerts are polled by WorkManager (about every 15 minutes), not instant push.

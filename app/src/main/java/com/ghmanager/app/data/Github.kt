@@ -27,6 +27,8 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
+var isArabicUi: () -> Boolean = { false }
+
 class ApiException(val code: Int, message: String) : Exception(message)
 
 fun enc(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
@@ -47,6 +49,13 @@ fun human(n: Long): String {
 fun ago(iso: String): String = try {
     val s = Duration.between(Instant.parse(iso), Instant.now()).seconds
     when {
+        isArabicUi() -> when {
+            s < 60 -> "الآن"
+            s < 3600 -> "منذ ${s / 60} د"
+            s < 86400 -> "منذ ${s / 3600} س"
+            s < 2592000 -> "منذ ${s / 86400} يوم"
+            else -> "منذ ${s / 2592000} شهر"
+        }
         s < 60 -> "just now"
         s < 3600 -> "${s / 60}m ago"
         s < 86400 -> "${s / 3600}h ago"
@@ -54,6 +63,27 @@ fun ago(iso: String): String = try {
         else -> "${s / 2592000}mo ago"
     }
 } catch (e: Exception) { iso }
+
+fun gitBlobSha(bytes: ByteArray): String {
+    val md = MessageDigest.getInstance("SHA-1")
+    md.update("blob ${bytes.size}\u0000".toByteArray())
+    md.update(bytes)
+    return md.digest().joinToString("") { "%02x".format(it) }
+}
+
+fun freeName(path: String, existing: Set<String>, taken: MutableSet<String>): String {
+    val dir = path.substringBeforeLast('/', "")
+    val name = path.substringAfterLast('/')
+    val dot = name.lastIndexOf('.')
+    val stem = if (dot > 0) name.substring(0, dot) else name
+    val ext = if (dot > 0) name.substring(dot) else ""
+    var n = 1
+    while (true) {
+        val cand = (if (dir.isEmpty()) "" else "$dir/") + "$stem ($n)$ext"
+        if (cand !in existing && cand !in taken) { taken.add(cand); return cand }
+        n++
+    }
+}
 
 class UploadItem(val path: String, val size: Long, val open: () -> InputStream, val lfs: Boolean = false)
 
@@ -259,7 +289,7 @@ object Github {
     suspend fun uploadFiles(
         owner: String, repo: String, branch: String, items: List<UploadItem>, message: String,
         cache: MutableMap<String, String>, onCache: () -> Unit,
-        log: (String) -> Unit, progress: (Int, Int) -> Unit
+        log: (String) -> Unit, progress: (Int, Int) -> Unit, mode: String = "merge", prefix: String = ""
     ): String {
         val base = "/repos/$owner/$repo"
         var files = items
@@ -289,24 +319,66 @@ object Github {
         }
         if (files.isEmpty()) return baseSha
         var tree = get("$base/git/commits/$baseSha").getJSONObject("tree").getString("sha")
+        // What the repository already has at this commit: path -> blob sha.
+        val existing = HashMap<String, String>()
+        try {
+            val full = get("$base/git/trees/$baseSha?recursive=1")
+            if (full.optBoolean("truncated") && mode == "mirror") throw ApiException(0, "Repository is too large to compare for Replace folder")
+            val arr = full.optJSONArray("tree") ?: JSONArray()
+            for (k in 0 until arr.length()) {
+                val o = arr.getJSONObject(k)
+                if (o.optString("type") == "blob") existing[o.getString("path")] = o.getString("sha")
+            }
+        } catch (e: ApiException) {
+            if (mode != "merge") throw e
+        }
         val entries = mutableListOf<JSONObject>()
+        val seen = HashSet<String>()
+        val taken = HashSet<String>()
+        var changed = 0; var unchanged = 0; var skipped = 0; var deleted = 0
         files.forEachIndexed { i, f ->
             progress(i, files.size)
-            val key = f.path + "@" + f.size + (if (f.lfs) "#lfs" else "")
+            var path = f.path
+            seen.add(path)
+            val inRepo = existing[path]
+            if (mode == "add" && inRepo != null) { skipped++; return@forEachIndexed }
+            if (mode == "update" && inRepo == null) { skipped++; return@forEachIndexed }
+            var bytes: ByteArray? = null
+            if (!f.lfs && inRepo != null) {
+                bytes = withContext(Dispatchers.IO) { f.open().use { it.readBytes() } }
+                if (gitBlobSha(bytes) == inRepo) { unchanged++; return@forEachIndexed }
+                if (mode == "keep") path = freeName(path, existing.keys, taken)
+            } else if (mode == "keep" && inRepo != null) {
+                path = freeName(path, existing.keys, taken)
+            }
+            val key = path + "@" + f.size + (if (f.lfs) "#lfs" else "")
             var sha = cache[key]
             if (sha == null) {
-                val bytes = if (f.lfs) {
+                val data = bytes ?: if (f.lfs) {
                     log("Git LFS upload: ${f.path} (${human(f.size)})")
                     lfsPointer(owner, repo, f)
                 } else withContext(Dispatchers.IO) { f.open().use { it.readBytes() } }
-                sha = send("POST", "$base/git/blobs", JSONObject().put("content", b64(bytes)).put("encoding", "base64")).getString("sha")
+                sha = send("POST", "$base/git/blobs", JSONObject().put("content", b64(data)).put("encoding", "base64")).getString("sha")
                 cache[key] = sha
                 onCache()
             }
-            val name = f.path.substringAfterLast('/')
-            val mode = if (name == "gradlew" || name.endsWith(".sh")) "100755" else "100644"
-            entries.add(JSONObject().put("path", f.path).put("mode", mode).put("type", "blob").put("sha", sha))
+            val name = path.substringAfterLast('/')
+            val fmode = if (name == "gradlew" || name.endsWith(".sh")) "100755" else "100644"
+            entries.add(JSONObject().put("path", path).put("mode", fmode).put("type", "blob").put("sha", sha))
+            changed++
             if ((i + 1) % 25 == 0) log("Uploaded ${i + 1}/${files.size} files")
+        }
+        if (mode == "mirror") {
+            val scope = prefix.trim().trim('/').let { if (it.isEmpty()) "" else "$it/" }
+            existing.keys.filter { it.startsWith(scope) && it !in seen && !it.startsWith(".github/") }.forEach {
+                entries.add(JSONObject().put("path", it).put("mode", "100644").put("type", "blob").put("sha", JSONObject.NULL))
+                deleted++
+            }
+        }
+        log("Changes: $changed added or updated, $unchanged unchanged, $skipped skipped, $deleted deleted")
+        if (entries.isEmpty()) {
+            log("No changes: everything is already up to date")
+            return baseSha
         }
         for (chunk in entries.chunked(200)) {
             tree = send("POST", "$base/git/trees", JSONObject().put("base_tree", tree).put("tree", JSONArray(chunk))).getString("sha")

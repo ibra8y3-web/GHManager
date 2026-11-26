@@ -25,7 +25,8 @@ data class UploadJob(
     val tree: String, val skip: List<String>, val skipJunk: Boolean, val wf: String?,
     val lfsPatterns: List<String>, val autoLfsMb: Int,
     val state: String = "queued", val detail: String = "", val done: Int = 0, val total: Int = 0,
-    val created: Long = System.currentTimeMillis(), val commit: String = ""
+    val created: Long = System.currentTimeMillis(), val commit: String = "",
+    val mode: String = "merge", val prefix: String = ""
 ) {
     val label get() = "$owner/$repo ($branch)"
 
@@ -33,6 +34,7 @@ data class UploadJob(
         .put("message", message).put("tree", tree).put("skip", JSONArray(skip)).put("skipJunk", skipJunk)
         .put("wf", wf ?: "").put("lfs", JSONArray(lfsPatterns)).put("autoLfsMb", autoLfsMb).put("state", state)
         .put("detail", detail).put("done", done).put("total", total).put("created", created).put("commit", commit)
+        .put("mode", mode).put("prefix", prefix)
 
     companion object {
         fun fromJson(o: JSONObject): UploadJob {
@@ -41,12 +43,14 @@ data class UploadJob(
                 o.getString("id"), o.getString("owner"), o.getString("repo"), o.getString("branch"), o.optString("message"),
                 o.getString("tree"), strs("skip"), o.optBoolean("skipJunk", true), o.optString("wf").ifEmpty { null },
                 strs("lfs"), o.optInt("autoLfsMb", 0), o.optString("state"), o.optString("detail"),
-                o.optInt("done"), o.optInt("total"), o.optLong("created"), o.optString("commit")
+                o.optInt("done"), o.optInt("total"), o.optLong("created"), o.optString("commit"),
+                o.optString("mode").ifEmpty { "merge" }, o.optString("prefix")
             )
         }
         fun create(owner: String, repo: String, branch: String, message: String, tree: String, skip: List<String>,
-                   skipJunk: Boolean, wf: String?, lfsPatterns: List<String>, autoLfsMb: Int) =
-            UploadJob(UUID.randomUUID().toString(), owner, repo, branch, message, tree, skip, skipJunk, wf, lfsPatterns, autoLfsMb)
+                   skipJunk: Boolean, wf: String?, lfsPatterns: List<String>, autoLfsMb: Int,
+                   mode: String = "merge", prefix: String = "") =
+            UploadJob(UUID.randomUUID().toString(), owner, repo, branch, message, tree, skip, skipJunk, wf, lfsPatterns, autoLfsMb, mode = mode, prefix = prefix)
     }
 }
 
@@ -92,6 +96,8 @@ object Queue {
         val patterns = job.lfsPatterns.filter { it.isNotBlank() }.map { glob(it) }
         val limit = job.autoLfsMb * 1024L * 1024L
         val items = mutableListOf<UploadItem>()
+        val pre = job.prefix.trim().trim('/')
+        fun pp(p: String) = if (pre.isEmpty()) p else "$pre/$p"
         val lfsLines = mutableListOf<String>()
         job.lfsPatterns.filter { it.isNotBlank() }.forEach { lfsLines.add("${it.trim()} filter=lfs diff=lfs merge=lfs -text") }
         for (l in all) {
@@ -101,8 +107,8 @@ object Queue {
             val big = job.autoLfsMb > 0 && l.size >= limit
             val lfs = byPattern || big
             if (!lfs && l.size > 90L * 1024 * 1024) { log("Skipped ${l.path}: over 90 MB (enable Git LFS)"); continue }
-            if (big && !byPattern) lfsLines.add("${l.path} filter=lfs diff=lfs merge=lfs -text")
-            items.add(UploadItem(l.path, l.size, { c.contentResolver.openInputStream(l.doc.uri)!! }, lfs))
+            if (big && !byPattern) lfsLines.add("${pp(l.path)} filter=lfs diff=lfs merge=lfs -text")
+            items.add(UploadItem(pp(l.path), l.size, { c.contentResolver.openInputStream(l.doc.uri)!! }, lfs))
         }
         if (lfsLines.isNotEmpty()) {
             val existing = all.firstOrNull { it.path == ".gitattributes" }
@@ -126,7 +132,7 @@ object Queue {
         return Github.uploadFiles(job.owner, job.repo, job.branch, items, job.message, cache, {
             val now = System.currentTimeMillis()
             if (now - lastSave > 1500) { lastSave = now; cacheFile.writeText(JSONObject(cache as Map<*, *>).toString()) }
-        }, log, progress)
+        }, log, progress, job.mode, job.prefix)
     }
 }
 

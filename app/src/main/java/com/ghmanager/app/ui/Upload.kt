@@ -23,6 +23,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+private val UPLOAD_MODES = listOf(
+    Triple("Add new and update changed", "merge", "Adds new files and updates files that changed. Everything else in the repository stays as it is."),
+    Triple("Add new files only", "add", "Adds files that do not exist yet. Files already in the repository are never touched."),
+    Triple("Update existing files only", "update", "Updates files that already exist and changed. New files are not added."),
+    Triple("Keep both (rename new copies)", "keep", "If a different file with the same name exists, the new one is added as name (1).ext and the old one is kept."),
+    Triple("Replace folder (mirror)", "mirror", "Makes the repository folder identical to your folder: adds, updates and deletes the rest.")
+)
+
 @Composable
 fun UploadScreen(open: (String, String) -> Unit) {
     val ctx = LocalContext.current
@@ -43,6 +51,10 @@ fun UploadScreen(open: (String, String) -> Unit) {
     var autoLfs by remember { mutableStateOf(true) }
     var lfsPatterns by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
+    var modeLabel by remember { mutableStateOf(UPLOAD_MODES[0].first) }
+    var prefix by remember { mutableStateOf("") }
+    var confirmMirror by remember { mutableStateOf(false) }
+    val modeKey = UPLOAD_MODES.first { it.first == modeLabel }.second
     var pick by remember { mutableStateOf(false) }
     var jobs by remember { mutableStateOf(Queue.all().reversed()) }
     var formErr by remember { mutableStateOf<String?>(null) }
@@ -67,7 +79,7 @@ fun UploadScreen(open: (String, String) -> Unit) {
     val sendCount = files.count { it.path !in skipPaths }
     val detected = Detect.type(files.map { it.path })
     val ready = tree != null && !scanning && !submitting && sendCount > 0 && branch.isNotBlank() &&
-        (if (newMode) newName.isNotBlank() else target != null)
+        (if (newMode) newName.isNotBlank() else target != null) && (modeKey != "mirror" || confirmMirror)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Panel {
@@ -114,6 +126,17 @@ fun UploadScreen(open: (String, String) -> Unit) {
             if (detected != null) SwitchRow(t("Add a build workflow") + " ($detected)", addWf) { addWf = it }
         }
         Panel {
+            SectionTitle("3. What to do with existing files")
+            Pick("Upload mode", modeLabel, UPLOAD_MODES.map { it.first }) { modeLabel = it; confirmMirror = false }
+            Text(UPLOAD_MODES.first { it.first == modeLabel }.third, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            Field("Folder inside the repository (optional, e.g. docs/assets)", prefix, { prefix = it })
+            if (modeKey == "mirror") {
+                Text("Files that exist in this folder of the repository but not in your upload will be deleted in the commit. You can still restore them from history.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                SwitchRow("I understand, replace the folder", confirmMirror) { confirmMirror = it }
+            }
+            Text("Identical files are never uploaded again, so only real changes become a commit.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+        }
+        Panel {
             SectionTitle("Git LFS")
             SwitchRow("Use Git LFS automatically for files over 50 MB", autoLfs) { autoLfs = it }
             Field("Extra LFS patterns (comma separated, e.g. *.apk,*.zip)", lfsPatterns, { lfsPatterns = it })
@@ -136,7 +159,8 @@ fun UploadScreen(open: (String, String) -> Unit) {
                         val job = UploadJob.create(
                             owner, repo, branch.trim(), msg, tree.toString(), skipPaths.toList(), skipJunk,
                             if (addWf) detected else null,
-                            lfsPatterns.split(",").map { it.trim() }.filter { it.isNotEmpty() }, if (autoLfs) 50 else 0
+                            lfsPatterns.split(",").map { it.trim() }.filter { it.isNotEmpty() }, if (autoLfs) 50 else 0,
+                            modeKey, prefix.trim().trim('/')
                         )
                         Queue.enqueue(ctx, job)
                         jobs = Queue.all().reversed()
@@ -150,7 +174,8 @@ fun UploadScreen(open: (String, String) -> Unit) {
                     submitting = false
                 }
             },
-            enabled = ready, modifier = Modifier.fillMaxWidth().height(54.dp)
+            enabled = ready, modifier = Modifier.fillMaxWidth().height(58.dp),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
         ) {
             Icon(Icons.Default.CloudUpload, null); Spacer(Modifier.width(8.dp)); Text(t("Queue upload of") + " $sendCount " + t("files"))
         }
